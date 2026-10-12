@@ -1,0 +1,13 @@
+{
+  "name": "booking-resource-scheduler",
+  "private": true,
+  "packageManager": "pnpm@10.30.3",
+  "scripts": {
+    "dev:api": "pnpm --filter @booking/api start:dev",
+    "dev:web": "pnpm --filter @booking/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format"
+  }
+}

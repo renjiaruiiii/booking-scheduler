@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+coverage/
+.pnpm-store/
+/HANDOFF-01_项目规划和搭建框架.md
+/HANDOFF-02_首页和注册登录.md
+/项目.md
+/项目总约束.md

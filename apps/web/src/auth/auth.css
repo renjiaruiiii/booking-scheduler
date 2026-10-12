@@ -1,0 +1,121 @@
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background: #f4f7fb;
+  color: #14213d;
+}
+.auth-card {
+  width: min(100%, 480px);
+  padding: 48px;
+  background: #fff;
+  border: 1px solid #dce3ed;
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(30, 52, 84, 0.09);
+}
+.auth-heading h1,
+.signed-in h1 {
+  margin: 0 0 12px;
+  font-size: 30px;
+  line-height: 1.2;
+}
+.auth-heading p:not(.auth-eyebrow) {
+  margin: 0 0 32px;
+  color: #6d7b8e;
+}
+.auth-eyebrow {
+  margin: 0 0 16px;
+  color: #2b6cb0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+.auth-tabs {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid #e3e8ef;
+}
+.auth-tabs button {
+  padding: 0 2px 12px;
+  color: #7b8798;
+  background: transparent;
+  border: 0;
+  font-weight: 700;
+}
+.auth-tabs button.active {
+  color: #14213d;
+  border-bottom: 2px solid #2b6cb0;
+}
+.auth-card form {
+  display: grid;
+  gap: 10px;
+}
+.auth-card label {
+  margin-top: 8px;
+  color: #40506a;
+  font-size: 13px;
+  font-weight: 700;
+}
+.auth-card input {
+  width: 100%;
+  padding: 12px 13px;
+  border: 1px solid #ccd6e3;
+  border-radius: 6px;
+  outline: none;
+}
+.auth-card input:focus {
+  border-color: #2b6cb0;
+  box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.13);
+}
+.primary-button,
+.secondary-button {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+.primary-button {
+  color: #fff;
+  background: #2b6cb0;
+  border: 1px solid #2b6cb0;
+}
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.secondary-button {
+  color: #2b6cb0;
+  background: #fff;
+  border: 1px solid #b8c9dc;
+}
+.auth-message {
+  margin: 18px 0 0;
+  color: #2b6cb0;
+  font-size: 14px;
+}
+.signed-in dl {
+  display: grid;
+  gap: 18px;
+  margin: 28px 0;
+}
+.signed-in dl div {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e7ecf2;
+}
+.signed-in dt {
+  margin-bottom: 5px;
+  color: #7b8798;
+  font-size: 12px;
+}
+.signed-in dd {
+  margin: 0;
+  font-weight: 600;
+}
+@media (max-width: 520px) {
+  .auth-card {
+    padding: 32px 24px;
+  }
+}
