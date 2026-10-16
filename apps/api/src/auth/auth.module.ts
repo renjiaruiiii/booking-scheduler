@@ -5,6 +5,7 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { AccessTokenGuard } from "./access-token.guard";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { RolesGuard } from "./roles.guard";
 
 @Module({
   imports: [
@@ -18,6 +19,6 @@ import { AuthService } from "./auth.service";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AccessTokenGuard],
+  providers: [AuthService, AccessTokenGuard, RolesGuard],
 })
 export class AuthModule {}

@@ -14,6 +14,8 @@ import { AuthService } from "./auth.service";
 import { AccessTokenGuard } from "./access-token.guard";
 import type { AccessTokenPayload } from "./access-token.guard";
 import { CurrentUser } from "./current-user.decorator";
+import { Roles } from "./roles.decorator";
+import { RolesGuard } from "./roles.guard";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 
@@ -32,7 +34,8 @@ export class AuthController {
   }
 
   @Get("me")
-  @UseGuards(AccessTokenGuard)
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("USER", "RESOURCE_ADMIN", "SYSTEM_ADMIN")
   me(@CurrentUser() user: AccessTokenPayload) {
     return { user };
   }

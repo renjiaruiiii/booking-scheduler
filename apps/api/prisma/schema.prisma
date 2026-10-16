@@ -12,16 +12,22 @@ enum UserStatus {
   DISABLED
 }
 
+enum ResourceStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model User {
-  id            Int            @id @default(autoincrement())
-  username      String         @unique @db.VarChar(50)
-  email         String         @unique @db.VarChar(255)
-  passwordHash  String         @map("password_hash") @db.VarChar(255)
-  status        UserStatus     @default(ACTIVE)
-  createdAt     DateTime       @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt     DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
-  roles         UserRole[]
-  refreshTokens RefreshToken[]
+  id               Int            @id @default(autoincrement())
+  username         String         @unique @db.VarChar(50)
+  email            String         @unique @db.VarChar(255)
+  passwordHash     String         @map("password_hash") @db.VarChar(255)
+  status           UserStatus     @default(ACTIVE)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
+  roles            UserRole[]
+  refreshTokens    RefreshToken[]
+  createdResources Resource[]
 
   @@index([status, createdAt], map: "idx_users_status_created_at")
   @@map("users")
@@ -57,4 +63,49 @@ model RefreshToken {
 
   @@index([userId, expiresAt], map: "idx_refresh_tokens_user_expires_at")
   @@map("refresh_tokens")
+}
+
+model Resource {
+  id               Int                       @id @default(autoincrement())
+  code             String                    @unique @db.VarChar(50)
+  name             String                    @db.VarChar(100)
+  description      String?                   @db.Text
+  status           ResourceStatus            @default(ACTIVE)
+  createdById      Int                       @map("created_by")
+  createdAt        DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime                  @updatedAt @map("updated_at") @db.DateTime(3)
+  createdBy        User                      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  rules            ResourceRule[]
+  unavailableDates ResourceUnavailableDate[]
+
+  @@index([status, createdAt], map: "idx_resources_status_created_at")
+  @@map("resources")
+}
+
+model ResourceRule {
+  id            Int       @id @default(autoincrement())
+  resourceId    Int       @map("resource_id")
+  weekday       Int       @db.UnsignedTinyInt
+  startTime     DateTime  @map("start_time") @db.Time(0)
+  endTime       DateTime  @map("end_time") @db.Time(0)
+  slotMinutes   Int       @map("slot_minutes") @db.UnsignedSmallInt
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  resource      Resource  @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([resourceId, weekday], map: "idx_resource_rules_resource_weekday")
+  @@map("resource_rules")
+}
+
+model ResourceUnavailableDate {
+  id         Int      @id @default(autoincrement())
+  resourceId Int      @map("resource_id")
+  date       DateTime @db.Date
+  reason     String?  @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([resourceId, date], map: "uk_resource_unavailable_date")
+  @@map("resource_unavailable_dates")
 }
