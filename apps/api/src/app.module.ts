@@ -5,6 +5,7 @@ import { HealthController } from "./health.controller";
 import { validateEnvironment } from "./config/env.validation";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ResourcesModule } from "./resources/resources.module";
+import { BookingsModule } from "./bookings/bookings.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ResourcesModule } from "./resources/resources.module";
     PrismaModule,
     AuthModule,
     ResourcesModule,
+    BookingsModule,
   ],
   controllers: [HealthController],
 })

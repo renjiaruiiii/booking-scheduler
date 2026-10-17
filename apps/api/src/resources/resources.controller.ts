@@ -18,7 +18,9 @@ import { RolesGuard } from "../auth/roles.guard";
 import { CreateResourceDto } from "./dto/create-resource.dto";
 import { CreateResourceRuleDto } from "./dto/create-resource-rule.dto";
 import { CreateResourceUnavailableDateDto } from "./dto/create-resource-unavailable-date.dto";
+import { GenerateResourceSlotsDto } from "./dto/generate-resource-slots.dto";
 import { ListResourcesDto } from "./dto/list-resources.dto";
+import { ListResourceSlotsDto } from "./dto/list-resource-slots.dto";
 import { UpdateResourceDto } from "./dto/update-resource.dto";
 import { UpdateResourceRuleDto } from "./dto/update-resource-rule.dto";
 import { UpdateResourceStatusDto } from "./dto/update-resource-status.dto";
@@ -93,9 +95,33 @@ export class ResourcesController {
     );
   }
 
+  @Post(":resourceId/slots/generate")
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("RESOURCE_ADMIN", "SYSTEM_ADMIN")
+  generateSlots(
+    @Param("resourceId", ParseIntPipe) resourceId: number,
+    @Body() dto: GenerateResourceSlotsDto,
+    @CurrentUser() user: AccessTokenPayload,
+  ) {
+    return this.resourcesService.generateSlots(
+      resourceId,
+      dto,
+      user.sub,
+      user.roles.includes("SYSTEM_ADMIN"),
+    );
+  }
+
   @Get(":id")
   get(@Param("id", ParseIntPipe) id: number) {
     return this.resourcesService.get(id);
+  }
+
+  @Get(":resourceId/slots")
+  listAvailableSlots(
+    @Param("resourceId", ParseIntPipe) resourceId: number,
+    @Query() query: ListResourceSlotsDto,
+  ) {
+    return this.resourcesService.listAvailableSlots(resourceId, query);
   }
 
   @Post()

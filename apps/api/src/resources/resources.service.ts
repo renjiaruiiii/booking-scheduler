@@ -10,6 +10,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreateResourceDto } from "./dto/create-resource.dto";
 import { CreateResourceRuleDto } from "./dto/create-resource-rule.dto";
 import { CreateResourceUnavailableDateDto } from "./dto/create-resource-unavailable-date.dto";
+import { GenerateResourceSlotsDto } from "./dto/generate-resource-slots.dto";
+import { ListResourceSlotsDto } from "./dto/list-resource-slots.dto";
 import { UpdateResourceRuleDto } from "./dto/update-resource-rule.dto";
 import { ListResourcesDto } from "./dto/list-resources.dto";
 import { UpdateResourceDto } from "./dto/update-resource.dto";
@@ -298,6 +300,99 @@ export class ResourcesService {
     return { success: true };
   }
 
+  async generateSlots(
+    resourceId: number,
+    dto: GenerateResourceSlotsDto,
+    userId: number,
+    isSystemAdmin: boolean,
+  ) {
+    await this.requireManageAccess(resourceId, userId, isSystemAdmin);
+    const slotDate = this.parseDate(dto.date);
+    const unavailable = await this.prisma.resourceUnavailableDate.findFirst({
+      where: { resourceId, date: slotDate },
+    });
+    if (unavailable) {
+      return { date: dto.date, created: 0, skipped: true };
+    }
+
+    const weekday = slotDate.getUTCDay();
+    const rules = await this.prisma.resourceRule.findMany({
+      where: {
+        resourceId,
+        weekday,
+        effectiveFrom: { lte: slotDate },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: slotDate } }],
+      },
+    });
+    const slots = new Map<
+      string,
+      {
+        resourceId: number;
+        slotDate: Date;
+        startAt: Date;
+        endAt: Date;
+        status: "AVAILABLE";
+        version: number;
+      }
+    >();
+
+    for (const rule of rules) {
+      const startAt = this.slotDateTime(
+        dto.date,
+        this.timeText(rule.startTime),
+      );
+      const endAt = this.slotDateTime(dto.date, this.timeText(rule.endTime));
+      for (
+        let current = startAt.getTime();
+        current < endAt.getTime();
+        current += rule.slotMinutes * 60_000
+      ) {
+        const slotStart = new Date(current);
+        const slotEnd = new Date(current + rule.slotMinutes * 60_000);
+        if (slotEnd > endAt) break;
+        slots.set(slotStart.toISOString(), {
+          resourceId,
+          slotDate,
+          startAt: slotStart,
+          endAt: slotEnd,
+          status: "AVAILABLE",
+          version: 0,
+        });
+      }
+    }
+
+    if (!slots.size) return { date: dto.date, created: 0, skipped: false };
+    const result = await this.prisma.resourceSlot.createMany({
+      data: [...slots.values()],
+      skipDuplicates: true,
+    });
+    return { date: dto.date, created: result.count, skipped: false };
+  }
+
+  async listAvailableSlots(resourceId: number, dto: ListResourceSlotsDto) {
+    const resource = await this.prisma.resource.findFirst({
+      where: { id: resourceId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (!resource) throw new NotFoundException("资源不存在");
+
+    return this.prisma.resourceSlot.findMany({
+      where: {
+        resourceId,
+        slotDate: this.parseDate(dto.date),
+        status: "AVAILABLE",
+      },
+      orderBy: { startAt: "asc" },
+      select: {
+        id: true,
+        slotDate: true,
+        startAt: true,
+        endAt: true,
+        status: true,
+      },
+    });
+  }
+
   private async requireManageAccess(
     resourceId: number,
     userId: number,
@@ -320,6 +415,14 @@ export class ResourcesService {
 
   private timeValue(value: string) {
     return new Date(`1970-01-01T${value}:00.000Z`);
+  }
+
+  private timeText(value: Date) {
+    return value.toISOString().slice(11, 16);
+  }
+
+  private slotDateTime(date: string, time: string) {
+    return new Date(`${date}T${time}:00.000Z`);
   }
 
   private parseDate(value: string) {

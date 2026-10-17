@@ -17,6 +17,20 @@ enum ResourceStatus {
   INACTIVE
 }
 
+enum SlotStatus {
+  AVAILABLE
+  BOOKED
+  BLOCKED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  REJECTED
+  COMPLETED
+}
+
 model User {
   id               Int            @id @default(autoincrement())
   username         String         @unique @db.VarChar(50)
@@ -28,6 +42,7 @@ model User {
   roles            UserRole[]
   refreshTokens    RefreshToken[]
   createdResources Resource[]
+  bookings         Booking[]
 
   @@index([status, createdAt], map: "idx_users_status_created_at")
   @@map("users")
@@ -77,6 +92,8 @@ model Resource {
   createdBy        User                      @relation(fields: [createdById], references: [id], onDelete: Restrict)
   rules            ResourceRule[]
   unavailableDates ResourceUnavailableDate[]
+  slots            ResourceSlot[]
+  bookings         Booking[]
 
   @@index([status, createdAt], map: "idx_resources_status_created_at")
   @@map("resources")
@@ -108,4 +125,51 @@ model ResourceUnavailableDate {
 
   @@unique([resourceId, date], map: "uk_resource_unavailable_date")
   @@map("resource_unavailable_dates")
+}
+
+model ResourceSlot {
+  id           Int           @id @default(autoincrement())
+  resourceId   Int           @map("resource_id")
+  slotDate     DateTime      @map("slot_date") @db.Date
+  startAt      DateTime      @map("start_at") @db.DateTime(3)
+  endAt        DateTime      @map("end_at") @db.DateTime(3)
+  status       SlotStatus    @default(AVAILABLE)
+  version      Int           @default(0)
+  resource     Resource      @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  bookingSlots BookingSlot[]
+
+  @@unique([resourceId, startAt], map: "uk_resource_start")
+  @@index([resourceId, slotDate, status], map: "idx_resource_slots_date_status")
+  @@map("resource_slots")
+}
+
+model Booking {
+  id             Int           @id @default(autoincrement())
+  bookingNo      String        @unique @map("booking_no") @db.VarChar(50)
+  userId         Int           @map("user_id")
+  resourceId     Int           @map("resource_id")
+  status         BookingStatus @default(PENDING)
+  remark         String?       @db.Text
+  idempotencyKey String?       @map("idempotency_key") @db.VarChar(100)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.DateTime(3)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  resource       Resource      @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  bookingSlots   BookingSlot[]
+
+  @@unique([userId, idempotencyKey], map: "uk_bookings_user_idempotency")
+  @@index([userId, status, createdAt], map: "idx_bookings_user_status_created_at")
+  @@index([resourceId, status, createdAt], map: "idx_bookings_resource_status_created_at")
+  @@map("bookings")
+}
+
+model BookingSlot {
+  bookingId Int          @map("booking_id")
+  slotId    Int          @map("slot_id")
+  booking   Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  slot      ResourceSlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
+
+  @@id([bookingId, slotId])
+  @@unique([slotId], map: "uk_booking_slot_slot")
+  @@map("booking_slots")
 }

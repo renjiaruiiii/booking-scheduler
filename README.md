@@ -2,7 +2,7 @@
 
 当前源码已实现项目骨架、MySQL/Redis 基础设施、Prisma 用户角色、Refresh Token、资源和每周规则模型、Prisma Client 接入、NestJS 配置接入，以及用户注册、Access Token 登录和 Refresh Token 轮换/退出撤销。资源 API 支持启用资源查询、创建、编辑和启用/停用。
 
-当前认证已包含 Access Token Guard、RBAC 角色 Guard 和受保护的当前用户接口；资源写操作受 `RESOURCE_ADMIN` / `SYSTEM_ADMIN` 角色保护，资源管理员只能管理自己创建的资源。每周规则和不可预约日期的管理 API 已实现。时间片生成和预约业务尚未实现。
+当前认证已包含 Access Token Guard、RBAC 角色 Guard 和受保护的当前用户接口；资源写操作受 `RESOURCE_ADMIN` / `SYSTEM_ADMIN` 角色保护，资源管理员只能管理自己创建的资源。每周规则、不可预约日期和时间片 API 已实现。预约创建、我的预约列表和详情 API 已实现，取消、审批和状态流转尚未实现。
 
 ## 环境
 
@@ -72,8 +72,18 @@ DELETE /api/v1/resources/:resourceId/rules/:ruleId (RESOURCE_ADMIN / SYSTEM_ADMI
 GET   /api/v1/resources/:resourceId/unavailable-dates (RESOURCE_ADMIN / SYSTEM_ADMIN)
 POST  /api/v1/resources/:resourceId/unavailable-dates (RESOURCE_ADMIN / SYSTEM_ADMIN)
 DELETE /api/v1/resources/:resourceId/unavailable-dates/:dateId (RESOURCE_ADMIN / SYSTEM_ADMIN)
+POST  /api/v1/resources/:resourceId/slots/generate (RESOURCE_ADMIN / SYSTEM_ADMIN)
+GET   /api/v1/resources/:resourceId/slots?date=2026-10-19
+POST  /api/v1/bookings
+GET   /api/v1/bookings?page=1&pageSize=20
+GET   /api/v1/bookings/:id
 ```
 
 公开资源列表和详情只返回启用资源。管理列表包含停用资源，资源管理员仅能看到自己创建的资源，系统管理员可以查看全部；分页大小最大为 100。资源编码仅允许大写字母、数字、下划线和连字符。
 
 每周规则的 `weekday` 使用 `0` 到 `6`（周日到周六）；时间使用 `HH:mm`，日期使用 `YYYY-MM-DD`。规则管理仅允许资源管理员管理自己创建的资源，或系统管理员管理任意资源。
+
+时间片生成会读取指定日期对应的规则，跳过不可预约日期，按规则切分并通过唯一约束保持幂等；生成接口不会覆盖已有时间片状态。
+可预约时间片查询只返回 `AVAILABLE` 状态，并按开始时间升序排列；资源未启用或不存在时返回 `404`。
+
+创建预约会在事务中原子占用全部时间片；请求体支持可选 `idempotencyKey`，重复提交相同用户和幂等键会返回原预约。

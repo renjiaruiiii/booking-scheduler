@@ -23,13 +23,19 @@ describe("ResourcesService", () => {
   };
   const resourceUnavailableDate = {
     findMany: jest.fn(),
+    findFirst: jest.fn(),
     create: jest.fn(),
     deleteMany: jest.fn(),
+  };
+  const resourceSlot = {
+    createMany: jest.fn(),
+    findMany: jest.fn(),
   };
   const service = new ResourcesService({
     resource,
     resourceRule,
     resourceUnavailableDate,
+    resourceSlot,
   } as never);
 
   beforeEach(() => jest.clearAllMocks());
@@ -338,5 +344,105 @@ describe("ResourcesService", () => {
     expect(resourceUnavailableDate.deleteMany).toHaveBeenCalledWith({
       where: { id: 10, resourceId: 4 },
     });
+  });
+
+  it("generates idempotent slots from the active weekday rules", async () => {
+    resource.findFirst.mockResolvedValue({ id: 4 });
+    resourceUnavailableDate.findFirst = jest.fn().mockResolvedValue(null);
+    resourceRule.findMany.mockResolvedValue([
+      {
+        startTime: new Date("1970-01-01T09:00:00.000Z"),
+        endTime: new Date("1970-01-01T10:00:00.000Z"),
+        slotMinutes: 30,
+      },
+    ]);
+    resourceSlot.createMany.mockResolvedValue({ count: 2 });
+
+    const result = await service.generateSlots(
+      4,
+      { date: "2026-10-19" },
+      7,
+      false,
+    );
+
+    expect(result).toEqual({ date: "2026-10-19", created: 2, skipped: false });
+    expect(resourceSlot.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          resourceId: 4,
+          startAt: new Date("2026-10-19T09:00:00.000Z"),
+          endAt: new Date("2026-10-19T09:30:00.000Z"),
+          status: "AVAILABLE",
+          version: 0,
+        }),
+        expect.objectContaining({
+          resourceId: 4,
+          startAt: new Date("2026-10-19T09:30:00.000Z"),
+          endAt: new Date("2026-10-19T10:00:00.000Z"),
+        }),
+      ]),
+      skipDuplicates: true,
+    });
+  });
+
+  it("deduplicates overlapping rules and skips unavailable dates", async () => {
+    resource.findFirst.mockResolvedValue({ id: 4 });
+    resourceUnavailableDate.findFirst = jest
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 20 });
+    resourceRule.findMany.mockResolvedValue([
+      {
+        startTime: new Date("1970-01-01T09:00:00.000Z"),
+        endTime: new Date("1970-01-01T10:00:00.000Z"),
+        slotMinutes: 30,
+      },
+      {
+        startTime: new Date("1970-01-01T09:30:00.000Z"),
+        endTime: new Date("1970-01-01T10:30:00.000Z"),
+        slotMinutes: 30,
+      },
+    ]);
+    resourceSlot.createMany.mockResolvedValue({ count: 3 });
+
+    await service.generateSlots(4, { date: "2026-10-19" }, 7, false);
+    expect(resourceSlot.createMany.mock.calls[0][0].data).toHaveLength(3);
+
+    await expect(
+      service.generateSlots(4, { date: "2026-10-20" }, 7, false),
+    ).resolves.toEqual({ date: "2026-10-20", created: 0, skipped: true });
+    expect(resourceSlot.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists available slots for an active resource in start order", async () => {
+    resource.findFirst.mockResolvedValue({ id: 4 });
+    resourceSlot.findMany.mockResolvedValue([]);
+
+    await service.listAvailableSlots(4, { date: "2026-10-19" });
+
+    expect(resourceSlot.findMany).toHaveBeenCalledWith({
+      where: {
+        resourceId: 4,
+        slotDate: new Date("2026-10-19T00:00:00.000Z"),
+        status: "AVAILABLE",
+      },
+      orderBy: { startAt: "asc" },
+      select: {
+        id: true,
+        slotDate: true,
+        startAt: true,
+        endAt: true,
+        status: true,
+      },
+    });
+  });
+
+  it("does not expose slots for an inactive or missing resource", async () => {
+    resource.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.listAvailableSlots(4, { date: "2026-10-19" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(resourceSlot.findMany).not.toHaveBeenCalled();
   });
 });
