@@ -41,6 +41,7 @@ export default function HomeApp() {
           排期系统
         </a>
         <nav aria-label="主导航">
+          <a href="/resources">浏览资源</a>
           <a href="#capabilities">核心能力</a>
           <a href="#workflow">使用流程</a>
           <a href="#status">项目状态</a>
@@ -60,11 +61,11 @@ export default function HomeApp() {
           面向资源提供方和预约用户的模块化预约平台。先看清可用时间，再提交可靠预约。
         </p>
         <div className="home-actions">
-          <a className="home-primary" href="/auth">
-            立即注册
+          <a className="home-primary" href="/resources">
+            浏览可用资源
           </a>
-          <a className="home-secondary" href="#capabilities">
-            了解系统能力
+          <a className="home-secondary" href="/auth">
+            登录 / 注册
           </a>
         </div>
         <div className="hero-proof">

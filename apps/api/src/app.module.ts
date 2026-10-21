@@ -6,6 +6,9 @@ import { validateEnvironment } from "./config/env.validation";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ResourcesModule } from "./resources/resources.module";
 import { BookingsModule } from "./bookings/bookings.module";
+import { OutboxModule } from "./outbox/outbox.module";
+import { OperationLogModule } from "./operation-log/operation-log.module";
+import { UsersModule } from "./users/users.module";
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { BookingsModule } from "./bookings/bookings.module";
     AuthModule,
     ResourcesModule,
     BookingsModule,
+    OutboxModule,
+    OperationLogModule,
+    UsersModule,
   ],
   controllers: [HealthController],
 })

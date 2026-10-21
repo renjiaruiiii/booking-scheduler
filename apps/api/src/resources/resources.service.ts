@@ -79,8 +79,20 @@ export class ResourcesService {
 
   async create(dto: CreateResourceDto, userId: number) {
     try {
-      return await this.prisma.resource.create({
-        data: { ...dto, createdById: userId },
+      return await this.prisma.$transaction(async (tx) => {
+        const resource = await tx.resource.create({
+          data: { ...dto, createdById: userId },
+        });
+        await tx.operationLog.create({
+          data: {
+            operatorId: userId,
+            action: "RESOURCE_CREATED",
+            targetType: "RESOURCE",
+            targetId: resource.id,
+            metadata: { code: resource.code, name: resource.name },
+          },
+        });
+        return resource;
       });
     } catch (error) {
       if (
@@ -111,7 +123,35 @@ export class ResourcesService {
     userId: number,
     isSystemAdmin: boolean,
   ) {
-    return this.updateOwnedResource(id, { status }, userId, isSystemAdmin);
+    return this.prisma.$transaction(async (tx) => {
+      const where = isSystemAdmin ? { id } : { id, createdById: userId };
+      const resource = await tx.resource.findFirst({
+        where,
+        select: { id: true, code: true, name: true, status: true },
+      });
+      if (!resource) throw new NotFoundException("资源不存在或无权管理");
+      if (resource.status === status) return { id, status };
+
+      const updated = await tx.resource.updateMany({
+        where: { ...where, status: resource.status },
+        data: { status },
+      });
+      if (updated.count !== 1) {
+        throw new ConflictException("资源状态已变更，请刷新后重试");
+      }
+
+      await tx.operationLog.create({
+        data: {
+          operatorId: userId,
+          action: "RESOURCE_STATUS_CHANGED",
+          targetType: "RESOURCE",
+          targetId: id,
+          metadata: { code: resource.code, from: resource.status, to: status },
+        },
+      });
+
+      return { id, status };
+    });
   }
 
   async listRules(resourceId: number, userId: number, isSystemAdmin: boolean) {
@@ -149,16 +189,36 @@ export class ResourcesService {
       throw new BadRequestException("生效结束日期不能早于开始日期");
     }
 
-    return this.prisma.resourceRule.create({
-      data: {
-        resourceId,
-        weekday: dto.weekday,
-        startTime: this.timeValue(dto.startTime),
-        endTime: this.timeValue(dto.endTime),
-        slotMinutes: dto.slotMinutes,
-        effectiveFrom,
-        effectiveTo,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const rule = await tx.resourceRule.create({
+        data: {
+          resourceId,
+          weekday: dto.weekday,
+          startTime: this.timeValue(dto.startTime),
+          endTime: this.timeValue(dto.endTime),
+          slotMinutes: dto.slotMinutes,
+          effectiveFrom,
+          effectiveTo,
+        },
+      });
+      await tx.operationLog.create({
+        data: {
+          operatorId: userId,
+          action: "RESOURCE_RULE_CREATED",
+          targetType: "RESOURCE",
+          targetId: resourceId,
+          metadata: {
+            ruleId: rule.id,
+            weekday: dto.weekday,
+            startTime: dto.startTime,
+            endTime: dto.endTime,
+            slotMinutes: dto.slotMinutes,
+            effectiveFrom: dto.effectiveFrom,
+            effectiveTo: dto.effectiveTo ?? null,
+          },
+        },
+      });
+      return rule;
     });
   }
 
@@ -173,46 +233,46 @@ export class ResourcesService {
       throw new BadRequestException("至少提供一个要更新的字段");
     }
 
-    const rule = await this.prisma.resourceRule.findFirst({
-      where: {
-        id: ruleId,
-        resourceId,
-        ...(isSystemAdmin ? {} : { resource: { is: { createdById: userId } } }),
-      },
-    });
-    if (!rule) throw new NotFoundException("规则不存在或无权管理");
+    return this.prisma.$transaction(async (tx) => {
+      const rule = await tx.resourceRule.findFirst({
+        where: {
+          id: ruleId,
+          resourceId,
+          ...(isSystemAdmin
+            ? {}
+            : { resource: { is: { createdById: userId } } }),
+        },
+      });
+      if (!rule) throw new NotFoundException("规则不存在或无权管理");
 
-    const startTime =
-      dto.startTime ?? rule.startTime.toISOString().slice(11, 16);
-    const endTime = dto.endTime ?? rule.endTime.toISOString().slice(11, 16);
-    const slotMinutes = dto.slotMinutes ?? rule.slotMinutes;
-    const startMinutes = this.parseTime(startTime);
-    const endMinutes = this.parseTime(endTime);
-    if (
-      endMinutes <= startMinutes ||
-      (endMinutes - startMinutes) % slotMinutes !== 0
-    ) {
-      throw new BadRequestException(
-        "结束时间必须晚于开始时间，且时长必须能被时间片长度整除",
-      );
-    }
+      const startTime = dto.startTime ?? this.timeText(rule.startTime);
+      const endTime = dto.endTime ?? this.timeText(rule.endTime);
+      const slotMinutes = dto.slotMinutes ?? rule.slotMinutes;
+      const startMinutes = this.parseTime(startTime);
+      const endMinutes = this.parseTime(endTime);
+      if (
+        endMinutes <= startMinutes ||
+        (endMinutes - startMinutes) % slotMinutes !== 0
+      ) {
+        throw new BadRequestException(
+          "结束时间必须晚于开始时间，且时长必须能被时间片长度整除",
+        );
+      }
 
-    const effectiveFrom = dto.effectiveFrom
-      ? this.parseDate(dto.effectiveFrom)
-      : rule.effectiveFrom;
-    const effectiveTo =
-      dto.effectiveTo === undefined
-        ? rule.effectiveTo
-        : dto.effectiveTo === null
-          ? null
-          : this.parseDate(dto.effectiveTo);
-    if (effectiveTo && effectiveTo < effectiveFrom) {
-      throw new BadRequestException("生效结束日期不能早于开始日期");
-    }
+      const effectiveFrom = dto.effectiveFrom
+        ? this.parseDate(dto.effectiveFrom)
+        : rule.effectiveFrom;
+      const effectiveTo =
+        dto.effectiveTo === undefined
+          ? rule.effectiveTo
+          : dto.effectiveTo === null
+            ? null
+            : this.parseDate(dto.effectiveTo);
+      if (effectiveTo && effectiveTo < effectiveFrom) {
+        throw new BadRequestException("生效结束日期不能早于开始日期");
+      }
 
-    return this.prisma.resourceRule.update({
-      where: { id: ruleId },
-      data: {
+      const data = {
         ...(dto.weekday === undefined ? {} : { weekday: dto.weekday }),
         ...(dto.startTime === undefined
           ? {}
@@ -225,7 +285,26 @@ export class ResourcesService {
           : { slotMinutes: dto.slotMinutes }),
         ...(dto.effectiveFrom === undefined ? {} : { effectiveFrom }),
         ...(dto.effectiveTo === undefined ? {} : { effectiveTo }),
-      },
+      };
+      const updatedRule = await tx.resourceRule.update({
+        where: { id: ruleId },
+        data,
+      });
+      await tx.operationLog.create({
+        data: {
+          operatorId: userId,
+          action: "RESOURCE_RULE_UPDATED",
+          targetType: "RESOURCE",
+          targetId: resourceId,
+          metadata: {
+            ruleId,
+            before: this.ruleAuditSnapshot(rule),
+            after: this.ruleAuditSnapshot(updatedRule),
+            changedFields: Object.keys(data),
+          },
+        },
+      });
+      return updatedRule;
     });
   }
 
@@ -235,15 +314,28 @@ export class ResourcesService {
     userId: number,
     isSystemAdmin: boolean,
   ) {
-    const result = await this.prisma.resourceRule.deleteMany({
-      where: {
+    return this.prisma.$transaction(async (tx) => {
+      const where = {
         id: ruleId,
         resourceId,
         ...(isSystemAdmin ? {} : { resource: { is: { createdById: userId } } }),
-      },
+      };
+      const rule = await tx.resourceRule.findFirst({ where });
+      if (!rule) throw new NotFoundException("规则不存在或无权管理");
+
+      const result = await tx.resourceRule.deleteMany({ where });
+      if (!result.count) throw new NotFoundException("规则不存在或无权管理");
+      await tx.operationLog.create({
+        data: {
+          operatorId: userId,
+          action: "RESOURCE_RULE_DELETED",
+          targetType: "RESOURCE",
+          targetId: resourceId,
+          metadata: { ruleId, rule: this.ruleAuditSnapshot(rule) },
+        },
+      });
+      return { success: true };
     });
-    if (!result.count) throw new NotFoundException("规则不存在或无权管理");
-    return { success: true };
   }
 
   async listUnavailableDates(
@@ -308,65 +400,121 @@ export class ResourcesService {
   ) {
     await this.requireManageAccess(resourceId, userId, isSystemAdmin);
     const slotDate = this.parseDate(dto.date);
-    const unavailable = await this.prisma.resourceUnavailableDate.findFirst({
-      where: { resourceId, date: slotDate },
-    });
-    if (unavailable) {
-      return { date: dto.date, created: 0, skipped: true };
-    }
-
-    const weekday = slotDate.getUTCDay();
-    const rules = await this.prisma.resourceRule.findMany({
-      where: {
-        resourceId,
-        weekday,
-        effectiveFrom: { lte: slotDate },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: slotDate } }],
-      },
-    });
-    const slots = new Map<
-      string,
-      {
-        resourceId: number;
-        slotDate: Date;
-        startAt: Date;
-        endAt: Date;
-        status: "AVAILABLE";
-        version: number;
+    return this.prisma.$transaction(async (tx) => {
+      const unavailable = await tx.resourceUnavailableDate.findFirst({
+        where: { resourceId, date: slotDate },
+      });
+      if (unavailable) {
+        return {
+          date: dto.date,
+          created: 0,
+          updated: 0,
+          removed: 0,
+          skipped: true,
+        };
       }
-    >();
 
-    for (const rule of rules) {
-      const startAt = this.slotDateTime(
-        dto.date,
-        this.timeText(rule.startTime),
-      );
-      const endAt = this.slotDateTime(dto.date, this.timeText(rule.endTime));
-      for (
-        let current = startAt.getTime();
-        current < endAt.getTime();
-        current += rule.slotMinutes * 60_000
-      ) {
-        const slotStart = new Date(current);
-        const slotEnd = new Date(current + rule.slotMinutes * 60_000);
-        if (slotEnd > endAt) break;
-        slots.set(slotStart.toISOString(), {
+      const weekday = slotDate.getUTCDay();
+      const rules = await tx.resourceRule.findMany({
+        where: {
           resourceId,
-          slotDate,
-          startAt: slotStart,
-          endAt: slotEnd,
-          status: "AVAILABLE",
-          version: 0,
-        });
-      }
-    }
+          weekday,
+          effectiveFrom: { lte: slotDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: slotDate } }],
+        },
+      });
+      const desiredSlots = new Map<
+        string,
+        {
+          resourceId: number;
+          slotDate: Date;
+          startAt: Date;
+          endAt: Date;
+          status: "AVAILABLE";
+          version: number;
+        }
+      >();
 
-    if (!slots.size) return { date: dto.date, created: 0, skipped: false };
-    const result = await this.prisma.resourceSlot.createMany({
-      data: [...slots.values()],
-      skipDuplicates: true,
+      for (const rule of rules) {
+        const startAt = this.slotDateTime(
+          dto.date,
+          this.timeText(rule.startTime),
+        );
+        const endAt = this.slotDateTime(dto.date, this.timeText(rule.endTime));
+        for (
+          let current = startAt.getTime();
+          current < endAt.getTime();
+          current += rule.slotMinutes * 60_000
+        ) {
+          const slotStart = new Date(current);
+          const slotEnd = new Date(current + rule.slotMinutes * 60_000);
+          if (slotEnd > endAt) break;
+          desiredSlots.set(slotStart.toISOString(), {
+            resourceId,
+            slotDate,
+            startAt: slotStart,
+            endAt: slotEnd,
+            status: "AVAILABLE",
+            version: 0,
+          });
+        }
+      }
+
+      const existingSlots = await tx.resourceSlot.findMany({
+        where: { resourceId, slotDate },
+        select: { id: true, startAt: true, endAt: true, status: true },
+      });
+      const existingByStart = new Map(
+        existingSlots.map((slot) => [slot.startAt.toISOString(), slot]),
+      );
+      const obsoleteAvailableIds = existingSlots
+        .filter(
+          (slot) =>
+            slot.status === "AVAILABLE" &&
+            !desiredSlots.has(slot.startAt.toISOString()),
+        )
+        .map((slot) => slot.id);
+
+      let removed = 0;
+      if (obsoleteAvailableIds.length) {
+        const result = await tx.resourceSlot.deleteMany({
+          where: {
+            id: { in: obsoleteAvailableIds },
+            status: "AVAILABLE",
+          },
+        });
+        removed = result.count;
+      }
+
+      let updated = 0;
+      for (const desired of desiredSlots.values()) {
+        const existing = existingByStart.get(desired.startAt.toISOString());
+        if (
+          existing?.status === "AVAILABLE" &&
+          existing.endAt.getTime() !== desired.endAt.getTime()
+        ) {
+          const result = await tx.resourceSlot.updateMany({
+            where: { id: existing.id, status: "AVAILABLE" },
+            data: { endAt: desired.endAt, version: { increment: 1 } },
+          });
+          updated += result.count;
+        }
+      }
+
+      const newSlots = [...desiredSlots.values()].filter(
+        (slot) => !existingByStart.has(slot.startAt.toISOString()),
+      );
+      let created = 0;
+      if (newSlots.length) {
+        const result = await tx.resourceSlot.createMany({
+          data: newSlots,
+          skipDuplicates: true,
+        });
+        created = result.count;
+      }
+
+      return { date: dto.date, created, updated, removed, skipped: false };
     });
-    return { date: dto.date, created: result.count, skipped: false };
   }
 
   async listAvailableSlots(resourceId: number, dto: ListResourceSlotsDto) {
@@ -421,6 +569,24 @@ export class ResourcesService {
     return value.toISOString().slice(11, 16);
   }
 
+  private ruleAuditSnapshot(rule: {
+    weekday: number;
+    startTime: Date;
+    endTime: Date;
+    slotMinutes: number;
+    effectiveFrom: Date;
+    effectiveTo: Date | null;
+  }) {
+    return {
+      weekday: rule.weekday,
+      startTime: this.timeText(rule.startTime),
+      endTime: this.timeText(rule.endTime),
+      slotMinutes: rule.slotMinutes,
+      effectiveFrom: rule.effectiveFrom.toISOString().slice(0, 10),
+      effectiveTo: rule.effectiveTo?.toISOString().slice(0, 10) ?? null,
+    };
+  }
+
   private slotDateTime(date: string, time: string) {
     return new Date(`${date}T${time}:00.000Z`);
   }
@@ -443,9 +609,21 @@ export class ResourcesService {
     isSystemAdmin: boolean,
   ) {
     try {
-      return await this.prisma.resource.update({
-        where: isSystemAdmin ? { id } : { id, createdById: userId },
-        data,
+      return await this.prisma.$transaction(async (tx) => {
+        const resource = await tx.resource.update({
+          where: isSystemAdmin ? { id } : { id, createdById: userId },
+          data,
+        });
+        await tx.operationLog.create({
+          data: {
+            operatorId: userId,
+            action: "RESOURCE_UPDATED",
+            targetType: "RESOURCE",
+            targetId: id,
+            metadata: { changedFields: Object.keys(data) },
+          },
+        });
+        return resource;
       });
     } catch (error) {
       if (

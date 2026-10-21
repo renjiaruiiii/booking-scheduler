@@ -96,6 +96,12 @@
   color: #2b6cb0;
   font-size: 14px;
 }
+.admin-link {
+  display: block;
+  margin-bottom: 8px;
+  color: #16745b;
+  font-weight: 700;
+}
 .signed-in dl {
   display: grid;
   gap: 18px;

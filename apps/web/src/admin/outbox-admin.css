@@ -1,0 +1,90 @@
+.outbox-admin-page {
+  min-height: 100vh;
+  padding: 32px clamp(16px, 4vw, 56px) 56px;
+  color: #202b36;
+  background: #f4f6f8;
+}
+
+.outbox-admin-header,
+.outbox-list-section,
+.outbox-admin-alert {
+  max-width: 1480px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.outbox-admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.outbox-admin-header h1.ant-typography {
+  margin: 4px 0 0;
+  font-size: 28px;
+}
+
+.outbox-admin-header a {
+  color: #176b5b;
+}
+
+.outbox-admin-eyebrow {
+  color: #60716d;
+  font-size: 13px;
+}
+
+.outbox-admin-alert {
+  margin-bottom: 20px;
+}
+
+.outbox-list-section {
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #e1e6e9;
+  border-radius: 6px;
+}
+
+.outbox-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.outbox-filters .ant-select,
+.outbox-filters .ant-input {
+  width: 200px;
+}
+
+.outbox-payload {
+  display: block;
+  max-width: 360px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.outbox-pagination {
+  margin-top: 18px;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .outbox-admin-page {
+    padding: 22px 12px 36px;
+  }
+
+  .outbox-list-section {
+    padding: 12px;
+  }
+
+  .outbox-admin-header {
+    align-items: flex-start;
+  }
+
+  .outbox-filters .ant-select,
+  .outbox-filters .ant-input {
+    width: 100%;
+  }
+}

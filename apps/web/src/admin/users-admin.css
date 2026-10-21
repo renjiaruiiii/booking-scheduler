@@ -1,0 +1,102 @@
+.users-admin-page {
+  min-height: 100vh;
+  padding: 32px clamp(16px, 4vw, 56px) 56px;
+  color: #202b36;
+  background: #f4f6f8;
+}
+
+.users-admin-header,
+.users-admin-alert,
+.users-list-section {
+  max-width: 1480px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.users-admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.users-admin-header h1.ant-typography {
+  margin: 4px 0 0;
+  font-size: 28px;
+}
+
+.users-admin-header a {
+  color: #176b5b;
+}
+
+.users-admin-eyebrow {
+  color: #60716d;
+  font-size: 13px;
+}
+
+.users-admin-alert {
+  margin-bottom: 20px;
+}
+
+.users-list-section {
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #e1e6e9;
+  border-radius: 6px;
+}
+
+.users-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.users-filters .ant-input {
+  width: min(360px, 100%);
+}
+
+.users-filters .ant-select {
+  min-width: 160px;
+}
+
+.users-admin-primary-cell {
+  display: grid;
+  gap: 3px;
+}
+
+.users-admin-primary-cell span {
+  color: #71808a;
+  font-size: 12px;
+}
+
+.users-role-options {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 18px;
+}
+
+.users-pagination {
+  margin-top: 18px;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .users-admin-page {
+    padding: 22px 12px 36px;
+  }
+
+  .users-admin-header {
+    align-items: flex-start;
+  }
+
+  .users-list-section {
+    padding: 12px;
+  }
+
+  .users-filters .ant-input,
+  .users-filters .ant-select {
+    width: 100%;
+  }
+}

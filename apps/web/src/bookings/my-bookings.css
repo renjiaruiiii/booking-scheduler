@@ -1,0 +1,94 @@
+.my-bookings-page {
+  min-height: 100vh;
+  padding: 32px clamp(16px, 4vw, 56px) 56px;
+  color: #202b36;
+  background: #f4f6f8;
+}
+
+.my-bookings-header,
+.my-bookings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.my-bookings-header,
+.my-bookings-alert,
+.my-bookings-list {
+  max-width: 1480px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.my-bookings-header {
+  margin-bottom: 28px;
+}
+
+.my-bookings-header h1.ant-typography {
+  margin: 4px 0 0;
+  font-size: 28px;
+}
+
+.my-bookings-header a {
+  color: #176b5b;
+}
+
+.my-bookings-eyebrow {
+  color: #60716d;
+  font-size: 13px;
+}
+
+.my-bookings-alert {
+  margin-bottom: 16px;
+}
+
+.my-bookings-list {
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #e1e6e9;
+  border-radius: 6px;
+}
+
+.my-bookings-heading {
+  margin-bottom: 16px;
+}
+
+.my-bookings-heading h2.ant-typography {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.my-bookings-primary {
+  display: grid;
+  gap: 3px;
+}
+
+.my-bookings-primary span {
+  color: #71808a;
+  font-size: 12px;
+}
+
+.my-bookings-slot-times {
+  white-space: pre-line;
+  line-height: 1.6;
+}
+
+.my-bookings-pagination {
+  margin-top: 18px;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .my-bookings-page {
+    padding: 22px 12px 36px;
+  }
+
+  .my-bookings-list {
+    padding: 12px;
+  }
+
+  .my-bookings-heading {
+    align-items: flex-start;
+  }
+}

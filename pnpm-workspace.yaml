@@ -1,5 +1,11 @@
 packages:
   - apps/*
 
+ignoredBuiltDependencies:
+  - msgpackr-extract
+
 onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
   - esbuild
+  - prisma

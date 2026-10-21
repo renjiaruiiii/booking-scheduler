@@ -109,6 +109,37 @@ export default function AuthApp() {
               </dd>
             </div>
           </dl>
+          <a className="admin-link" href="/resources">
+            浏览资源与可预约时间
+          </a>
+          <a className="admin-link" href="/bookings">
+            查看我的预约
+          </a>
+          {user.roles?.some((role) =>
+            ["RESOURCE_ADMIN", "SYSTEM_ADMIN"].includes(role.code),
+          ) && (
+            <>
+              <a className="admin-link" href="/admin/resources">
+                管理资源
+              </a>
+              <a className="admin-link" href="/admin/bookings">
+                管理预约
+              </a>
+            </>
+          )}
+          {user.roles?.some((role) => role.code === "SYSTEM_ADMIN") && (
+            <>
+              <a className="admin-link" href="/admin/operation-logs">
+                查看操作日志
+              </a>
+              <a className="admin-link" href="/admin/outbox">
+                查看 Outbox 事件
+              </a>
+              <a className="admin-link" href="/admin/users">
+                管理用户
+              </a>
+            </>
+          )}
           <button
             className="secondary-button"
             type="button"
