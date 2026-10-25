@@ -859,7 +859,8 @@ export default function ResourcesAdminApp() {
         cancelText="关闭"
         confirmLoading={generationLoading}
         okButtonProps={{
-          disabled: !generationFrom || !generationTo || generationFrom > generationTo,
+          disabled:
+            !generationFrom || !generationTo || generationFrom > generationTo,
         }}
         destroyOnHidden
       >

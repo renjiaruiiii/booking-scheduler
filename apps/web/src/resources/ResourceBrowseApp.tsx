@@ -7,7 +7,11 @@ import {
   Spin,
   Typography,
 } from "antd";
-import { CalendarOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons";
+import {
+  CalendarOutlined,
+  LeftOutlined,
+  RightOutlined,
+} from "@ant-design/icons";
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -391,8 +395,7 @@ export default function ResourceBrowseApp() {
               <div className="slot-timeline" aria-label={`${date} 可预约时间`}>
                 {slots.map((slot) => {
                   const booked = slot.status === "BOOKED";
-                  const selected =
-                    !booked && selectedSlotIds.includes(slot.id);
+                  const selected = !booked && selectedSlotIds.includes(slot.id);
                   return (
                     <button
                       className={`slot-timeline-row ${selected ? "selected" : ""} ${booked ? "booked" : ""}`}
@@ -407,7 +410,8 @@ export default function ResourceBrowseApp() {
                       </span>
                       <span className="slot-timeline-block">
                         <strong>
-                          {formatSlotTime(slot.startAt)} - {formatSlotTime(slot.endAt)}
+                          {formatSlotTime(slot.startAt)} -{" "}
+                          {formatSlotTime(slot.endAt)}
                         </strong>
                         <small>
                           {booked ? "已预约" : selected ? "已选择" : "可预约"}
