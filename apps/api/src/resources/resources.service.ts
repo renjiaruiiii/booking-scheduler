@@ -3,14 +3,17 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type { ResourceStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { RedisService } from "../redis/redis.service";
 import { CreateResourceDto } from "./dto/create-resource.dto";
 import { CreateResourceRuleDto } from "./dto/create-resource-rule.dto";
 import { CreateResourceUnavailableDateDto } from "./dto/create-resource-unavailable-date.dto";
 import { GenerateResourceSlotsDto } from "./dto/generate-resource-slots.dto";
+import { GenerateResourceSlotsRangeDto } from "./dto/generate-resource-slots-range.dto";
 import { ListResourceSlotsDto } from "./dto/list-resource-slots.dto";
 import { UpdateResourceRuleDto } from "./dto/update-resource-rule.dto";
 import { ListResourcesDto } from "./dto/list-resources.dto";
@@ -18,10 +21,13 @@ import { UpdateResourceDto } from "./dto/update-resource.dto";
 
 @Injectable()
 export class ResourcesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly redis?: RedisService,
+  ) {}
 
   list(query: ListResourcesDto) {
-    return this.listWhere(query, { status: "ACTIVE" });
+    return this.listWhere(query, { status: "ACTIVE" }, true);
   }
 
   listManaged(query: ListResourcesDto, userId: number, isSystemAdmin: boolean) {
@@ -31,6 +37,7 @@ export class ResourcesService {
   private async listWhere(
     query: ListResourcesDto,
     scope: Prisma.ResourceWhereInput,
+    cache = false,
   ) {
     const page = Number(query.page ?? 1);
     const pageSize = Number(query.pageSize ?? 20);
@@ -44,6 +51,18 @@ export class ResourcesService {
       throw new BadRequestException(
         "page 必须大于 0，pageSize 必须在 1 到 100 之间",
       );
+    }
+    const cacheKey = cache
+      ? `resource-cache:list:${page}:${pageSize}:${query.keyword ?? ""}`
+      : undefined;
+    if (cacheKey) {
+      const cached = await this.redis?.getJson<{
+        items: unknown[];
+        total: number;
+        page: number;
+        pageSize: number;
+      }>(cacheKey);
+      if (cached) return cached;
     }
     const where: Prisma.ResourceWhereInput = {
       ...scope,
@@ -66,20 +85,27 @@ export class ResourcesService {
       this.prisma.resource.count({ where }),
     ]);
 
-    return { items, total, page, pageSize };
+    const result = { items, total, page, pageSize };
+    if (cacheKey) await this.redis?.setJson(cacheKey, result, 30);
+    return result;
   }
 
   async get(id: number) {
+    const cacheKey = `resource-cache:detail:${id}`;
+    const cached = await this.redis?.getJson(cacheKey);
+    if (cached) return cached;
+
     const resource = await this.prisma.resource.findFirst({
       where: { id, status: "ACTIVE" },
     });
     if (!resource) throw new NotFoundException("资源不存在");
+    await this.redis?.setJson(cacheKey, resource, 30);
     return resource;
   }
 
   async create(dto: CreateResourceDto, userId: number) {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const resource = await this.prisma.$transaction(async (tx) => {
         const resource = await tx.resource.create({
           data: { ...dto, createdById: userId },
         });
@@ -94,6 +120,8 @@ export class ResourcesService {
         });
         return resource;
       });
+      await this.invalidateCache();
+      return resource;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -117,13 +145,13 @@ export class ResourcesService {
     return this.updateOwnedResource(id, dto, userId, isSystemAdmin);
   }
 
-  setStatus(
+  async setStatus(
     id: number,
     status: ResourceStatus,
     userId: number,
     isSystemAdmin: boolean,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const where = isSystemAdmin ? { id } : { id, createdById: userId };
       const resource = await tx.resource.findFirst({
         where,
@@ -152,6 +180,8 @@ export class ResourcesService {
 
       return { id, status };
     });
+    await this.invalidateCache();
+    return result;
   }
 
   async listRules(resourceId: number, userId: number, isSystemAdmin: boolean) {
@@ -169,6 +199,14 @@ export class ResourcesService {
     isSystemAdmin: boolean,
   ) {
     await this.requireManageAccess(resourceId, userId, isSystemAdmin);
+
+    const weekdays = dto.weekdays;
+    if (!weekdays.length) {
+      throw new BadRequestException("至少选择一个星期");
+    }
+    if (new Set(weekdays).size !== weekdays.length) {
+      throw new BadRequestException("星期不能重复");
+    }
 
     const startMinutes = this.parseTime(dto.startTime);
     const endMinutes = this.parseTime(dto.endTime);
@@ -190,35 +228,39 @@ export class ResourcesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const rule = await tx.resourceRule.create({
-        data: {
-          resourceId,
-          weekday: dto.weekday,
-          startTime: this.timeValue(dto.startTime),
-          endTime: this.timeValue(dto.endTime),
-          slotMinutes: dto.slotMinutes,
-          effectiveFrom,
-          effectiveTo,
-        },
-      });
-      await tx.operationLog.create({
-        data: {
-          operatorId: userId,
-          action: "RESOURCE_RULE_CREATED",
-          targetType: "RESOURCE",
-          targetId: resourceId,
-          metadata: {
-            ruleId: rule.id,
-            weekday: dto.weekday,
-            startTime: dto.startTime,
-            endTime: dto.endTime,
+      const rules = [];
+      for (const weekday of weekdays) {
+        const rule = await tx.resourceRule.create({
+          data: {
+            resourceId,
+            weekday,
+            startTime: this.timeValue(dto.startTime),
+            endTime: this.timeValue(dto.endTime),
             slotMinutes: dto.slotMinutes,
-            effectiveFrom: dto.effectiveFrom,
-            effectiveTo: dto.effectiveTo ?? null,
+            effectiveFrom,
+            effectiveTo,
           },
-        },
-      });
-      return rule;
+        });
+        rules.push(rule);
+        await tx.operationLog.create({
+          data: {
+            operatorId: userId,
+            action: "RESOURCE_RULE_CREATED",
+            targetType: "RESOURCE",
+            targetId: resourceId,
+            metadata: {
+              ruleId: rule.id,
+              weekday,
+              startTime: dto.startTime,
+              endTime: dto.endTime,
+              slotMinutes: dto.slotMinutes,
+              effectiveFrom: dto.effectiveFrom,
+              effectiveTo: dto.effectiveTo ?? null,
+            },
+          },
+        });
+      }
+      return rules;
     });
   }
 
@@ -370,7 +412,7 @@ export class ResourcesService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
-        throw new ConflictException("该资源在此日期已设置为不可预约");
+        throw new ConflictException("该资源在此日期已设置为排除日期");
       }
       throw error;
     }
@@ -387,7 +429,7 @@ export class ResourcesService {
       where: { id: dateId, resourceId },
     });
     if (!result.count) {
-      throw new NotFoundException("不可预约日期不存在");
+      throw new NotFoundException("排除日期不存在");
     }
     return { success: true };
   }
@@ -517,6 +559,52 @@ export class ResourcesService {
     });
   }
 
+  async generateSlotsRange(
+    resourceId: number,
+    dto: GenerateResourceSlotsRangeDto,
+    userId: number,
+    isSystemAdmin: boolean,
+  ) {
+    const from = this.parseDate(dto.from);
+    const to = this.parseDate(dto.to);
+    const days = Math.floor((to.getTime() - from.getTime()) / 86_400_000) + 1;
+    if (days < 1) {
+      throw new BadRequestException("结束日期不能早于开始日期");
+    }
+    if (days > 90) {
+      throw new BadRequestException("一次最多生成 90 天的时间片");
+    }
+
+    let created = 0;
+    let updated = 0;
+    let removed = 0;
+    let skippedDays = 0;
+    for (let index = 0; index < days; index += 1) {
+      const current = new Date(from);
+      current.setUTCDate(current.getUTCDate() + index);
+      const result = await this.generateSlots(
+        resourceId,
+        { date: current.toISOString().slice(0, 10) },
+        userId,
+        isSystemAdmin,
+      );
+      created += result.created;
+      updated += result.updated;
+      removed += result.removed;
+      if (result.skipped) skippedDays += 1;
+    }
+
+    return {
+      from: dto.from,
+      to: dto.to,
+      days,
+      created,
+      updated,
+      removed,
+      skippedDays,
+    };
+  }
+
   async listAvailableSlots(resourceId: number, dto: ListResourceSlotsDto) {
     const resource = await this.prisma.resource.findFirst({
       where: { id: resourceId, status: "ACTIVE" },
@@ -528,7 +616,7 @@ export class ResourcesService {
       where: {
         resourceId,
         slotDate: this.parseDate(dto.date),
-        status: "AVAILABLE",
+        status: { in: ["AVAILABLE", "BOOKED"] },
       },
       orderBy: { startAt: "asc" },
       select: {
@@ -539,6 +627,10 @@ export class ResourcesService {
         status: true,
       },
     });
+  }
+
+  private async invalidateCache() {
+    await this.redis?.deletePrefix("resource-cache:");
   }
 
   private async requireManageAccess(
@@ -609,7 +701,7 @@ export class ResourcesService {
     isSystemAdmin: boolean,
   ) {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const resource = await tx.resource.update({
           where: isSystemAdmin ? { id } : { id, createdById: userId },
           data,
@@ -625,6 +717,8 @@ export class ResourcesService {
         });
         return resource;
       });
+      await this.invalidateCache();
+      return result;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

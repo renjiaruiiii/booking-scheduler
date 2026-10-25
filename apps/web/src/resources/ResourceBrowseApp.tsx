@@ -1,19 +1,22 @@
 import {
   Alert,
   Button,
-  Checkbox,
   Empty,
   Input,
   Pagination,
   Spin,
   Typography,
 } from "antd";
+import { CalendarOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons";
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import BackToDashboard from "../auth/BackToDashboard";
 import "./resource-browse.css";
 
-const api = axios.create({ baseURL: "http://localhost:3000/api/v1" });
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? "/api/v1",
+});
 const pageSize = 20;
 
 type Resource = {
@@ -28,7 +31,7 @@ type ResourceSlot = {
   slotDate: string;
   startAt: string;
   endAt: string;
-  status: "AVAILABLE";
+  status: "AVAILABLE" | "BOOKED";
 };
 
 function today() {
@@ -46,6 +49,23 @@ function formatSlotTime(value: string) {
     minute: "2-digit",
     hourCycle: "h23",
   }).format(new Date(value));
+}
+
+function addDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDateLabel(value: string) {
+  return value.slice(5).replace("-", "/");
+}
+
+function formatWeekday(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "UTC",
+    weekday: "short",
+  }).format(new Date(`${value}T00:00:00.000Z`));
 }
 
 function errorText(error: unknown) {
@@ -67,7 +87,9 @@ export default function ResourceBrowseApp() {
   const [selectedResourceId, setSelectedResourceId] = useState<number | null>(
     null,
   );
-  const [date, setDate] = useState(today);
+  const initialDate = today();
+  const [date, setDate] = useState(initialDate);
+  const [dateRangeStart, setDateRangeStart] = useState(initialDate);
   const [slots, setSlots] = useState<ResourceSlot[]>([]);
   const [selectedSlotIds, setSelectedSlotIds] = useState<number[]>([]);
   const [loadingResources, setLoadingResources] = useState(true);
@@ -174,6 +196,33 @@ export default function ResourceBrowseApp() {
   const selectedResource = resources.find(
     (resource) => resource.id === selectedResourceId,
   );
+  const currentDate = today();
+  const dateCards = Array.from({ length: 7 }, (_, index) =>
+    addDays(dateRangeStart, index),
+  );
+
+  function toggleSlot(slotId: number) {
+    setSelectedSlotIds((current) =>
+      current.includes(slotId)
+        ? current.filter((id) => id !== slotId)
+        : [...current, slotId],
+    );
+  }
+
+  function moveDateRange(days: number) {
+    const minimumDate = today();
+    const requestedStart = addDays(dateRangeStart, days);
+    const nextStart =
+      requestedStart < minimumDate ? minimumDate : requestedStart;
+    setDateRangeStart(nextStart);
+    setDate(nextStart);
+  }
+
+  function resetDateRange() {
+    const nextDate = today();
+    setDateRangeStart(nextDate);
+    setDate(nextDate);
+  }
 
   return (
     <main className="resource-browse-page">
@@ -184,7 +233,7 @@ export default function ResourceBrowseApp() {
           </Typography.Text>
           <Typography.Title level={1}>浏览可预约资源</Typography.Title>
         </div>
-        <Link to="/auth">账号与登录</Link>
+        <BackToDashboard />
       </header>
 
       {error && (
@@ -279,12 +328,58 @@ export default function ResourceBrowseApp() {
                 {selectedResource?.name ?? "先选择一个资源"}
               </Typography.Text>
             </div>
-            <label className="resource-date-label">
-              <span>日期</span>
+          </div>
+
+          <div className="resource-date-navigation">
+            <Button
+              type="text"
+              icon={<LeftOutlined />}
+              aria-label="查看前 7 天"
+              title="前 7 天"
+              disabled={dateRangeStart <= currentDate}
+              onClick={() => moveDateRange(-7)}
+            />
+            <div className="resource-date-strip" aria-label="选择预约日期">
+              {dateCards.map((dateCard) => (
+                <button
+                  className={`resource-date-card ${dateCard === date ? "selected" : ""} ${dateCard === currentDate ? "today" : ""}`}
+                  type="button"
+                  key={dateCard}
+                  aria-pressed={dateCard === date}
+                  onClick={() => setDate(dateCard)}
+                >
+                  <span>{formatDateLabel(dateCard)}</span>
+                  <strong>{formatWeekday(dateCard)}</strong>
+                  {dateCard === currentDate && <small>今天</small>}
+                </button>
+              ))}
+            </div>
+            <Button
+              type="text"
+              icon={<RightOutlined />}
+              aria-label="查看后 7 天"
+              title="后 7 天"
+              onClick={() => moveDateRange(7)}
+            />
+          </div>
+          <div className="resource-date-actions">
+            <Button size="small" onClick={resetDateRange}>
+              今天
+            </Button>
+            <label className="resource-more-date">
+              <CalendarOutlined />
+              <span>更多日期</span>
               <input
                 type="date"
                 value={date}
-                onChange={(event) => setDate(event.target.value)}
+                min={currentDate}
+                aria-label="选择其他日期"
+                onChange={(event) => {
+                  const nextDate = event.target.value;
+                  if (!nextDate) return;
+                  setDateRangeStart(nextDate);
+                  setDate(nextDate);
+                }}
               />
             </label>
           </div>
@@ -293,15 +388,35 @@ export default function ResourceBrowseApp() {
             {slots.length === 0 ? (
               <Empty description="所选日期暂无可预约时间" />
             ) : (
-              <Checkbox.Group
-                className="slot-options"
-                value={selectedSlotIds}
-                onChange={(values) => setSelectedSlotIds(values as number[])}
-                options={slots.map((slot) => ({
-                  label: `${formatSlotTime(slot.startAt)} - ${formatSlotTime(slot.endAt)}`,
-                  value: slot.id,
-                }))}
-              />
+              <div className="slot-timeline" aria-label={`${date} 可预约时间`}>
+                {slots.map((slot) => {
+                  const booked = slot.status === "BOOKED";
+                  const selected =
+                    !booked && selectedSlotIds.includes(slot.id);
+                  return (
+                    <button
+                      className={`slot-timeline-row ${selected ? "selected" : ""} ${booked ? "booked" : ""}`}
+                      type="button"
+                      key={slot.id}
+                      aria-pressed={selected}
+                      disabled={booked}
+                      onClick={() => toggleSlot(slot.id)}
+                    >
+                      <span className="slot-timeline-time">
+                        {formatSlotTime(slot.startAt)}
+                      </span>
+                      <span className="slot-timeline-block">
+                        <strong>
+                          {formatSlotTime(slot.startAt)} - {formatSlotTime(slot.endAt)}
+                        </strong>
+                        <small>
+                          {booked ? "已预约" : selected ? "已选择" : "可预约"}
+                        </small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </Spin>
 

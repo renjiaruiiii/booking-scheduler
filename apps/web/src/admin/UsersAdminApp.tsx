@@ -17,10 +17,12 @@ import type { TableProps } from "antd";
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Link } from "react-router-dom";
+import BackToDashboard from "../auth/BackToDashboard";
 import "./users-admin.css";
 
-const api = axios.create({ baseURL: "http://localhost:3000/api/v1" });
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? "/api/v1",
+});
 const pageSize = 20;
 const statusOptions = [
   { label: "启用", value: "ACTIVE" },
@@ -256,12 +258,7 @@ export default function UsersAdminApp() {
           </Typography.Text>
           <Typography.Title level={1}>用户管理</Typography.Title>
         </div>
-        <Space wrap>
-          <Link to="/admin/operation-logs">操作日志</Link>
-          <Link to="/admin/outbox">Outbox 事件</Link>
-          <Link to="/admin/bookings">预约管理</Link>
-          <Link to="/">返回首页</Link>
-        </Space>
+        <BackToDashboard />
       </header>
 
       {error && (

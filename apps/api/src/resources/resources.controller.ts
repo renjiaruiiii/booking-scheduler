@@ -19,6 +19,7 @@ import { CreateResourceDto } from "./dto/create-resource.dto";
 import { CreateResourceRuleDto } from "./dto/create-resource-rule.dto";
 import { CreateResourceUnavailableDateDto } from "./dto/create-resource-unavailable-date.dto";
 import { GenerateResourceSlotsDto } from "./dto/generate-resource-slots.dto";
+import { GenerateResourceSlotsRangeDto } from "./dto/generate-resource-slots-range.dto";
 import { ListResourcesDto } from "./dto/list-resources.dto";
 import { ListResourceSlotsDto } from "./dto/list-resource-slots.dto";
 import { UpdateResourceDto } from "./dto/update-resource.dto";
@@ -104,6 +105,22 @@ export class ResourcesController {
     @CurrentUser() user: AccessTokenPayload,
   ) {
     return this.resourcesService.generateSlots(
+      resourceId,
+      dto,
+      user.sub,
+      user.roles.includes("SYSTEM_ADMIN"),
+    );
+  }
+
+  @Post(":resourceId/slots/generate-range")
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles("RESOURCE_ADMIN", "SYSTEM_ADMIN")
+  generateSlotsRange(
+    @Param("resourceId", ParseIntPipe) resourceId: number,
+    @Body() dto: GenerateResourceSlotsRangeDto,
+    @CurrentUser() user: AccessTokenPayload,
+  ) {
+    return this.resourcesService.generateSlotsRange(
       resourceId,
       dto,
       user.sub,

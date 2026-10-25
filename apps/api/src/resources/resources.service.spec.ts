@@ -35,22 +35,30 @@ describe("ResourcesService", () => {
     updateMany: jest.fn(),
     deleteMany: jest.fn(),
   };
-  const service = new ResourcesService({
-    resource,
-    resourceRule,
-    resourceUnavailableDate,
-    resourceSlot,
-    operationLog,
-    $transaction: jest.fn(async (callback) =>
-      callback({
-        resource,
-        operationLog,
-        resourceRule,
-        resourceUnavailableDate,
-        resourceSlot,
-      }),
-    ),
-  } as never);
+  const redis = {
+    getJson: jest.fn().mockResolvedValue(null),
+    setJson: jest.fn().mockResolvedValue(undefined),
+    deletePrefix: jest.fn().mockResolvedValue(undefined),
+  };
+  const service = new ResourcesService(
+    {
+      resource,
+      resourceRule,
+      resourceUnavailableDate,
+      resourceSlot,
+      operationLog,
+      $transaction: jest.fn(async (callback) =>
+        callback({
+          resource,
+          operationLog,
+          resourceRule,
+          resourceUnavailableDate,
+          resourceSlot,
+        }),
+      ),
+    } as never,
+    redis as never,
+  );
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -70,6 +78,30 @@ describe("ResourcesService", () => {
         take: 5,
       }),
     );
+  });
+
+  it("caches public resource lists and serves cache hits without database reads", async () => {
+    const cached = { items: [{ id: 1 }], total: 1, page: 1, pageSize: 20 };
+    redis.getJson.mockResolvedValueOnce(null).mockResolvedValueOnce(cached);
+    resource.findMany.mockResolvedValue([{ id: 1 }]);
+    resource.count.mockResolvedValue(1);
+
+    await expect(service.list({})).resolves.toEqual(cached);
+    await expect(service.list({})).resolves.toEqual(cached);
+    expect(resource.findMany).toHaveBeenCalledTimes(1);
+    expect(redis.setJson).toHaveBeenCalledWith(
+      "resource-cache:list:1:20:",
+      cached,
+      30,
+    );
+  });
+
+  it("invalidates cached resource data after a resource update", async () => {
+    resource.update.mockResolvedValue({ id: 4, name: "Updated" });
+
+    await service.update(4, { name: "Updated" }, 7, false);
+
+    expect(redis.deletePrefix).toHaveBeenCalledWith("resource-cache:");
   });
 
   it("rejects invalid pagination values", async () => {
@@ -203,6 +235,7 @@ describe("ResourcesService", () => {
         metadata: { code: "ROOM_1", from: "ACTIVE", to: "INACTIVE" },
       },
     });
+    expect(redis.deletePrefix).toHaveBeenCalledWith("resource-cache:");
   });
 
   it("returns not found when the resource is not owned by the administrator", async () => {
@@ -229,7 +262,7 @@ describe("ResourcesService", () => {
     await service.createRule(
       4,
       {
-        weekday: 1,
+        weekdays: [1],
         startTime: "09:00",
         endTime: "10:00",
         slotMinutes: 30,
@@ -258,7 +291,7 @@ describe("ResourcesService", () => {
         targetId: 4,
         metadata: {
           ruleId: 9,
-          weekday: 1,
+          weekdays: [1],
           startTime: "09:00",
           endTime: "10:00",
           slotMinutes: 30,
@@ -269,6 +302,40 @@ describe("ResourcesService", () => {
     });
   });
 
+  it("creates one rule per selected weekday in one transaction", async () => {
+    resource.findFirst.mockResolvedValue({ id: 4 });
+    resourceRule.create
+      .mockResolvedValueOnce({ id: 9 })
+      .mockResolvedValueOnce({ id: 10 })
+      .mockResolvedValueOnce({ id: 11 });
+
+    await expect(
+      service.createRule(
+        4,
+        {
+          weekdays: [1, 2, 5],
+          startTime: "09:00",
+          endTime: "12:00",
+          slotMinutes: 60,
+          effectiveFrom: "2026-10-01",
+        },
+        7,
+        false,
+      ),
+    ).resolves.toEqual([{ id: 9 }, { id: 10 }, { id: 11 }]);
+
+    expect(resourceRule.create).toHaveBeenNthCalledWith(1, {
+      data: expect.objectContaining({ resourceId: 4, weekday: 1 }),
+    });
+    expect(resourceRule.create).toHaveBeenNthCalledWith(2, {
+      data: expect.objectContaining({ resourceId: 4, weekday: 2 }),
+    });
+    expect(resourceRule.create).toHaveBeenNthCalledWith(3, {
+      data: expect.objectContaining({ resourceId: 4, weekday: 5 }),
+    });
+    expect(operationLog.create).toHaveBeenCalledTimes(3);
+  });
+
   it("rejects a rule whose duration is not divisible by its slot length", async () => {
     resource.findFirst.mockResolvedValue({ id: 4 });
 
@@ -276,7 +343,7 @@ describe("ResourcesService", () => {
       service.createRule(
         4,
         {
-          weekday: 1,
+          weekdays: [1],
           startTime: "09:00",
           endTime: "10:10",
           slotMinutes: 30,
@@ -595,6 +662,68 @@ describe("ResourcesService", () => {
     expect(resourceSlot.createMany).toHaveBeenCalledTimes(1);
   });
 
+  it("generates and aggregates a date range", async () => {
+    const generateSpy = jest
+      .spyOn(service, "generateSlots")
+      .mockResolvedValueOnce({
+        date: "2026-10-19",
+        created: 2,
+        updated: 1,
+        removed: 0,
+        skipped: false,
+      })
+      .mockResolvedValueOnce({
+        date: "2026-10-20",
+        created: 0,
+        updated: 0,
+        removed: 0,
+        skipped: true,
+      })
+      .mockResolvedValueOnce({
+        date: "2026-10-21",
+        created: 3,
+        updated: 0,
+        removed: 1,
+        skipped: false,
+      });
+
+    await expect(
+      service.generateSlotsRange(
+        4,
+        { from: "2026-10-19", to: "2026-10-21" },
+        7,
+        false,
+      ),
+    ).resolves.toEqual({
+      from: "2026-10-19",
+      to: "2026-10-21",
+      days: 3,
+      created: 5,
+      updated: 1,
+      removed: 1,
+      skippedDays: 1,
+    });
+    expect(generateSpy).toHaveBeenNthCalledWith(
+      2,
+      4,
+      { date: "2026-10-20" },
+      7,
+      false,
+    );
+    generateSpy.mockRestore();
+  });
+
+  it("rejects a range longer than 90 days", async () => {
+    await expect(
+      service.generateSlotsRange(
+        4,
+        { from: "2026-10-19", to: "2027-01-18" },
+        7,
+        false,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it("synchronizes changed rules without touching booked slots", async () => {
     resource.findFirst.mockResolvedValue({ id: 4 });
     resourceUnavailableDate.findFirst.mockResolvedValue(null);
@@ -650,7 +779,7 @@ describe("ResourcesService", () => {
     expect(resourceSlot.createMany).not.toHaveBeenCalled();
   });
 
-  it("lists available slots for an active resource in start order", async () => {
+  it("lists available and booked slots for an active resource in start order", async () => {
     resource.findFirst.mockResolvedValue({ id: 4 });
     resourceSlot.findMany.mockResolvedValue([]);
 
@@ -660,7 +789,7 @@ describe("ResourcesService", () => {
       where: {
         resourceId: 4,
         slotDate: new Date("2026-10-19T00:00:00.000Z"),
-        status: "AVAILABLE",
+        status: { in: ["AVAILABLE", "BOOKED"] },
       },
       orderBy: { startAt: "asc" },
       select: {

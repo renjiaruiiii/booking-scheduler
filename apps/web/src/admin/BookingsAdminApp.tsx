@@ -13,10 +13,12 @@ import {
 import type { TableProps } from "antd";
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import BackToDashboard from "../auth/BackToDashboard";
 import "./bookings-admin.css";
 
-const api = axios.create({ baseURL: "http://localhost:3000/api/v1" });
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? "/api/v1",
+});
 const pageSize = 20;
 const statuses = [
   "PENDING",
@@ -235,7 +237,7 @@ export default function BookingsAdminApp() {
           </Typography.Text>
           <Typography.Title level={1}>预约管理</Typography.Title>
         </div>
-        <Link to="/">返回首页</Link>
+        <BackToDashboard />
       </header>
 
       {error && (

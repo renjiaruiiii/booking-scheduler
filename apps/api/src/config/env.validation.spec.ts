@@ -25,4 +25,17 @@ describe("validateEnvironment", () => {
       validateEnvironment({ ...validEnvironment, API_PORT: "70000" }),
     ).toThrow("API_PORT must be an integer between 1 and 65535");
   });
+
+  it("normalizes and validates rate-limit settings", () => {
+    expect(
+      validateEnvironment({
+        ...validEnvironment,
+        RATE_LIMIT_MAX: "60",
+        RATE_LIMIT_WINDOW_SECONDS: "30",
+      }),
+    ).toMatchObject({ RATE_LIMIT_MAX: 60, RATE_LIMIT_WINDOW_SECONDS: 30 });
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, RATE_LIMIT_MAX: "0" }),
+    ).toThrow("RATE_LIMIT_MAX must be a positive integer");
+  });
 });

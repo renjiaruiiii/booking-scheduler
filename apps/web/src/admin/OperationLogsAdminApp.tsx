@@ -3,7 +3,6 @@ import {
   Button,
   Pagination,
   Select,
-  Space,
   Spin,
   Table,
   Typography,
@@ -12,10 +11,12 @@ import type { TableProps } from "antd";
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Link } from "react-router-dom";
+import BackToDashboard from "../auth/BackToDashboard";
 import "./operation-logs-admin.css";
 
-const api = axios.create({ baseURL: "http://localhost:3000/api/v1" });
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? "/api/v1",
+});
 const pageSize = 20;
 const actionOptions = [
   "BOOKING_STATUS_CHANGED",
@@ -223,12 +224,7 @@ export default function OperationLogsAdminApp() {
           </Typography.Text>
           <Typography.Title level={1}>操作日志</Typography.Title>
         </div>
-        <Space wrap>
-          <Link to="/admin/bookings">预约管理</Link>
-          <Link to="/admin/resources">资源管理</Link>
-          <Link to="/admin/outbox">Outbox 事件</Link>
-          <Link to="/">返回首页</Link>
-        </Space>
+        <BackToDashboard />
       </header>
 
       {error && (

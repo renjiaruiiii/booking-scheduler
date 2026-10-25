@@ -36,6 +36,11 @@
   background: #16745b;
   border-radius: 4px;
 }
+.home-nav .nav-login:hover,
+.home-nav .nav-login:focus-visible {
+  color: #fff;
+  background: #125f4b;
+}
 .home-hero {
   max-width: 1120px;
   margin: 0 auto;

@@ -1,4 +1,7 @@
 import {
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
   IsInt,
   IsOptional,
   IsString,
@@ -8,10 +11,13 @@ import {
 } from "class-validator";
 
 export class CreateResourceRuleDto {
-  @IsInt()
-  @Min(0)
-  @Max(6)
-  weekday!: number;
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  weekdays!: number[];
 
   @IsString()
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)

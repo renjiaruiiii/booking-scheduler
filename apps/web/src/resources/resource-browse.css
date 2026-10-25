@@ -111,43 +111,174 @@
   line-height: 1.5;
 }
 
-.resource-date-label {
+.resource-date-navigation {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: center;
+  margin: 4px 0 8px;
+}
+
+.resource-date-strip {
+  display: grid;
+  grid-auto-columns: minmax(82px, 1fr);
+  grid-auto-flow: column;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 3px;
+  scrollbar-width: thin;
+}
+
+.resource-date-card {
+  display: grid;
+  gap: 3px;
+  min-height: 72px;
+  padding: 10px 8px;
+  color: #30414a;
+  text-align: center;
+  background: #fff;
+  border: 1px solid #dce3e7;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.resource-date-card:focus-visible,
+.slot-timeline-row:focus-visible,
+.resource-more-date:focus-within {
+  outline: 2px solid #d59a3a;
+  outline-offset: 2px;
+}
+
+.resource-date-card:hover,
+.resource-date-card.today {
+  border-color: #d59a3a;
+}
+
+.resource-date-card.selected {
+  color: #fff;
+  background: #17735d;
+  border-color: #17735d;
+}
+
+.resource-date-card span {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.resource-date-card strong {
+  font-size: 13px;
+}
+
+.resource-date-card small {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.resource-date-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 2px 0 18px;
+}
+
+.resource-more-date {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   gap: 5px;
+  min-height: 30px;
+  padding: 4px 9px;
+  color: #176b5b;
+  font-size: 13px;
+  border: 1px solid #d6dfe4;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.resource-more-date input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.slot-timeline {
+  display: grid;
+  gap: 8px;
+  min-height: 150px;
+  padding: 4px 0 20px;
+}
+
+.slot-timeline-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  color: #30414a;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.slot-timeline-time {
+  padding-top: 17px;
+  color: #61717a;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.slot-timeline-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 58px;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f6f8f9;
+  border: 1px solid #dce3e7;
+  border-left: 4px solid #9ac6b9;
+  border-radius: 4px;
+}
+
+.slot-timeline-block strong {
+  font-size: 14px;
+}
+
+.slot-timeline-block small {
   color: #65736a;
   font-size: 12px;
 }
 
-.resource-date-label input {
-  min-height: 32px;
-  padding: 4px 8px;
-  border: 1px solid #d6dfe4;
-  border-radius: 4px;
-}
-
-.slot-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
-  gap: 10px;
-  width: 100%;
-  min-height: 150px;
-  align-content: start;
-  padding: 8px 0 20px;
-}
-
-.slot-options .ant-checkbox-wrapper {
-  display: flex;
-  align-items: center;
-  min-height: 42px;
-  margin-inline-start: 0;
-  padding: 8px 10px;
-  border: 1px solid #dce3e7;
-  border-radius: 4px;
-}
-
-.slot-options .ant-checkbox-wrapper-checked {
+.slot-timeline-row:hover .slot-timeline-block,
+.slot-timeline-row.selected .slot-timeline-block {
+  color: #135c4c;
+  background: #eaf5f0;
   border-color: #17735d;
-  background: #f2f8f5;
+}
+
+.slot-timeline-row.selected .slot-timeline-block {
+  border-left-color: #17735d;
+}
+
+.slot-timeline-row.booked {
+  cursor: not-allowed;
+}
+
+.slot-timeline-row.booked .slot-timeline-block {
+  color: #7a858b;
+  background: #f0f2f3;
+  border-color: #d5dcdf;
+  border-left-color: #9da8ad;
+}
+
+.slot-timeline-row.booked .slot-timeline-block small {
+  color: #7a858b;
 }
 
 .booking-submit-row {
@@ -175,6 +306,25 @@
   .resource-section-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .resource-date-navigation {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .resource-date-strip {
+    grid-auto-columns: 84px;
+  }
+
+  .slot-timeline-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .slot-timeline-block {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
   }
 
   .resource-search {

@@ -1,6 +1,7 @@
 import {
   Alert,
   Button,
+  Checkbox,
   Form,
   Input,
   InputNumber,
@@ -18,9 +19,12 @@ import type { TableProps } from "antd";
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import BackToDashboard from "../auth/BackToDashboard";
 import "./resources-admin.css";
 
-const api = axios.create({ baseURL: "http://localhost:3000/api/v1" });
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? "/api/v1",
+});
 const pageSize = 20;
 
 type Resource = {
@@ -42,7 +46,8 @@ type ResourceRule = {
   effectiveFrom: string;
   effectiveTo: string | null;
 };
-type RuleForm = Omit<ResourceRule, "id" | "effectiveTo"> & {
+type RuleForm = Omit<ResourceRule, "id" | "weekday" | "effectiveTo"> & {
+  weekdays: number[] | number;
   effectiveTo?: string;
 };
 type UnavailableDate = {
@@ -54,15 +59,21 @@ type UnavailableDateForm = {
   date: string;
   reason?: string;
 };
-type SlotGenerationResult = {
-  date: string;
+type SlotGenerationRangeResult = {
+  from: string;
+  to: string;
+  days: number;
+  skippedDays: number;
   created: number;
   updated: number;
   removed: number;
-  skipped: boolean;
 };
 
 const weekdayOptions = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const weekdaySelectOptions = [1, 2, 3, 4, 5, 6, 0].map((value) => ({
+  label: weekdayOptions[value],
+  value,
+}));
 
 function dateValue(value: string) {
   return value.slice(0, 10);
@@ -76,6 +87,13 @@ function localDateValue() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function addDays(value: string, days: number) {
+  if (!value) return "";
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function errorText(error: unknown) {
@@ -121,10 +139,13 @@ export default function ResourcesAdminApp() {
   const [generationResource, setGenerationResource] = useState<Resource | null>(
     null,
   );
-  const [generationDate, setGenerationDate] = useState(localDateValue());
+  const [generationFrom, setGenerationFrom] = useState(localDateValue());
+  const [generationTo, setGenerationTo] = useState(
+    addDays(localDateValue(), 29),
+  );
   const [generationLoading, setGenerationLoading] = useState(false);
   const [generationResult, setGenerationResult] =
-    useState<SlotGenerationResult | null>(null);
+    useState<SlotGenerationRangeResult | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -247,7 +268,7 @@ export default function ResourcesAdminApp() {
     setRuleFormOpen(true);
     ruleForm.resetFields();
     ruleForm.setFieldsValue({
-      weekday: 1,
+      weekdays: [1],
       startTime: "09:00",
       endTime: "10:00",
       slotMinutes: 30,
@@ -260,7 +281,7 @@ export default function ResourcesAdminApp() {
     setRuleEditing(rule);
     setRuleFormOpen(true);
     ruleForm.setFieldsValue({
-      weekday: rule.weekday,
+      weekdays: rule.weekday,
       startTime: timeValue(rule.startTime),
       endTime: timeValue(rule.endTime),
       slotMinutes: rule.slotMinutes,
@@ -273,23 +294,29 @@ export default function ResourcesAdminApp() {
     if (!token || !rulesResource) return;
     setRulesSaving(true);
     setError("");
+    const { weekdays, ...ruleValues } = values;
+    const selectedWeekdays = Array.isArray(weekdays) ? weekdays : [weekdays];
     const payload = {
-      ...values,
-      effectiveTo: ruleEditing
-        ? values.effectiveTo || null
-        : values.effectiveTo || undefined,
+      ...ruleValues,
+      effectiveTo: values.effectiveTo || undefined,
     };
     try {
       if (ruleEditing) {
         await api.patch(
           `/resources/${rulesResource.id}/rules/${ruleEditing.id}`,
-          payload,
+          {
+            ...payload,
+            weekday: selectedWeekdays[0],
+            effectiveTo: values.effectiveTo || null,
+          },
           { headers: { Authorization: `Bearer ${token}` } },
         );
       } else {
-        await api.post(`/resources/${rulesResource.id}/rules`, payload, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        await api.post(
+          `/resources/${rulesResource.id}/rules`,
+          { ...payload, weekdays: selectedWeekdays },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
       }
       setRuleEditing(null);
       setRuleFormOpen(false);
@@ -383,18 +410,22 @@ export default function ResourcesAdminApp() {
 
   function openSlotGeneration(resource: Resource) {
     setGenerationResource(resource);
-    setGenerationDate(localDateValue());
+    const from = localDateValue();
+    setGenerationFrom(from);
+    setGenerationTo(addDays(from, 29));
     setGenerationResult(null);
   }
 
-  async function generateSlots() {
-    if (!token || !generationResource || !generationDate) return;
+  async function generateSlotsRange() {
+    if (!token || !generationResource || !generationFrom || !generationTo) {
+      return;
+    }
     setGenerationLoading(true);
     setError("");
     try {
-      const { data } = await api.post<SlotGenerationResult>(
-        `/resources/${generationResource.id}/slots/generate`,
-        { date: generationDate },
+      const { data } = await api.post<SlotGenerationRangeResult>(
+        `/resources/${generationResource.id}/slots/generate-range`,
+        { from: generationFrom, to: generationTo },
         { headers: { Authorization: `Bearer ${token}` } },
       );
       setGenerationResult(data);
@@ -450,7 +481,7 @@ export default function ResourcesAdminApp() {
             规则
           </Button>
           <Button size="small" onClick={() => openUnavailableDates(resource)}>
-            禁用日期
+            排除日期
           </Button>
           <Button size="small" onClick={() => openSlotGeneration(resource)}>
             生成时间片
@@ -479,10 +510,7 @@ export default function ResourcesAdminApp() {
           </Typography.Text>
           <Typography.Title level={1}>资源管理</Typography.Title>
         </div>
-        <Space wrap>
-          <Link to="/admin/bookings">预约管理</Link>
-          <Link to="/resources">用户端资源页</Link>
-        </Space>
+        <BackToDashboard />
       </header>
 
       {error && (
@@ -625,7 +653,7 @@ export default function ResourcesAdminApp() {
       >
         <div className="resource-rules-toolbar">
           <Typography.Text type="secondary">
-            规则会按生效日期应用，时间片将在后续阶段生成。
+            可一次选择多个星期；排除日期不会生成时间片。
           </Typography.Text>
           <Button onClick={openCreateRule}>新增规则</Button>
         </div>
@@ -683,16 +711,18 @@ export default function ResourcesAdminApp() {
             </Typography.Title>
             <div className="resource-rule-form-grid">
               <Form.Item
-                label="星期"
-                name="weekday"
-                rules={[{ required: true }]}
+                label="星期（可多选）"
+                name="weekdays"
+                rules={[{ required: true, message: "至少选择一个星期" }]}
               >
-                <Select
-                  options={weekdayOptions.map((label, value) => ({
-                    label,
-                    value,
-                  }))}
-                />
+                {ruleEditing ? (
+                  <Select options={weekdaySelectOptions} />
+                ) : (
+                  <Checkbox.Group
+                    className="resource-rule-weekday-options"
+                    options={weekdaySelectOptions}
+                  />
+                )}
               </Form.Item>
               <Form.Item
                 label="开始时间"
@@ -752,8 +782,8 @@ export default function ResourcesAdminApp() {
       <Modal
         title={
           unavailableResource
-            ? `${unavailableResource.name} · 不可预约日期`
-            : "不可预约日期"
+            ? `${unavailableResource.name} · 排除日期`
+            : "排除日期"
         }
         open={unavailableModalOpen}
         onCancel={closeUnavailableDates}
@@ -788,9 +818,7 @@ export default function ResourcesAdminApp() {
         <Spin spinning={unavailableLoading}>
           <div className="unavailable-date-list">
             {unavailableDates.length === 0 ? (
-              <Typography.Text type="secondary">
-                暂无不可预约日期
-              </Typography.Text>
+              <Typography.Text type="secondary">暂无排除日期</Typography.Text>
             ) : (
               unavailableDates.map((item) => (
                 <div className="unavailable-date-row" key={item.id}>
@@ -799,7 +827,7 @@ export default function ResourcesAdminApp() {
                     <span>{item.reason || "未填写原因"}</span>
                   </div>
                   <Popconfirm
-                    title="移除此不可预约日期？"
+                    title="移除这个排除日期？"
                     okText="移除"
                     cancelText="返回"
                     onConfirm={() => void deleteUnavailableDate(item)}
@@ -826,38 +854,62 @@ export default function ResourcesAdminApp() {
           setGenerationResource(null);
           setGenerationResult(null);
         }}
-        onOk={() => void generateSlots()}
-        okText="生成"
+        onOk={() => void generateSlotsRange()}
+        okText="批量生成"
         cancelText="关闭"
         confirmLoading={generationLoading}
-        okButtonProps={{ disabled: !generationDate }}
+        okButtonProps={{
+          disabled: !generationFrom || !generationTo || generationFrom > generationTo,
+        }}
         destroyOnHidden
       >
         <Form layout="vertical">
-          <Form.Item label="生成日期" required>
+          <Form.Item label="开始日期" required>
             <Input
               type="date"
-              value={generationDate}
+              value={generationFrom}
               onChange={(event) => {
-                setGenerationDate(event.target.value);
+                setGenerationFrom(event.target.value);
                 setGenerationResult(null);
               }}
             />
           </Form.Item>
+          <Form.Item label="结束日期" required>
+            <Input
+              type="date"
+              value={generationTo}
+              min={generationFrom}
+              onChange={(event) => {
+                setGenerationTo(event.target.value);
+                setGenerationResult(null);
+              }}
+            />
+          </Form.Item>
+          <Space wrap>
+            <Typography.Text type="secondary">快捷范围：</Typography.Text>
+            {[7, 14, 30, 90].map((days) => (
+              <Button
+                key={days}
+                size="small"
+                disabled={!generationFrom}
+                onClick={() => {
+                  setGenerationTo(addDays(generationFrom, days - 1));
+                  setGenerationResult(null);
+                }}
+              >
+                {days} 天
+              </Button>
+            ))}
+          </Space>
+          <Typography.Text type="secondary">
+            最多一次生成 90 天；排除日期会自动跳过。
+          </Typography.Text>
         </Form>
         {generationResult && (
           <Alert
             showIcon
-            type={generationResult.skipped ? "warning" : "success"}
-            message={
-              generationResult.skipped
-                ? `${generationResult.date} 已设为不可预约日期，未生成时间片。`
-                : generationResult.created > 0 ||
-                    generationResult.updated > 0 ||
-                    generationResult.removed > 0
-                  ? `${generationResult.date} 已同步：新增 ${generationResult.created} 个，更新 ${generationResult.updated} 个，删除 ${generationResult.removed} 个。`
-                  : `${generationResult.date} 没有匹配的有效规则，未生成时间片。`
-            }
+            type="success"
+            message={`${generationResult.from} 至 ${generationResult.to} 已同步 ${generationResult.days} 天：新增 ${generationResult.created} 个，更新 ${generationResult.updated} 个，删除 ${generationResult.removed} 个，跳过排除日期 ${generationResult.skippedDays} 天。`}
           />
         )}
       </Modal>

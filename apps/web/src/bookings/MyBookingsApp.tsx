@@ -4,7 +4,6 @@ import {
   Empty,
   Pagination,
   Popconfirm,
-  Space,
   Spin,
   Table,
   Tag,
@@ -14,9 +13,12 @@ import type { TableProps } from "antd";
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import BackToDashboard from "../auth/BackToDashboard";
 import "./my-bookings.css";
 
-const api = axios.create({ baseURL: "http://localhost:3000/api/v1" });
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? "/api/v1",
+});
 const pageSize = 20;
 
 type BookingStatus =
@@ -205,10 +207,7 @@ export default function MyBookingsApp() {
           </Typography.Text>
           <Typography.Title level={1}>我的预约</Typography.Title>
         </div>
-        <Space wrap>
-          <Link to="/resources">浏览资源</Link>
-          <Link to="/auth">账号与登录</Link>
-        </Space>
+        <BackToDashboard />
       </header>
 
       {!token && (
