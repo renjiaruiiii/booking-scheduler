@@ -250,7 +250,7 @@ export class ResourcesService {
             targetId: resourceId,
             metadata: {
               ruleId: rule.id,
-              weekday,
+              weekdays: [weekday],
               startTime: dto.startTime,
               endTime: dto.endTime,
               slotMinutes: dto.slotMinutes,
