@@ -9,7 +9,7 @@ COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY apps/api apps/api
-RUN pnpm --filter @booking/api exec prisma generate
+RUN DATABASE_URL=mysql://placeholder:placeholder@localhost:3306/placeholder pnpm --filter @booking/api exec prisma generate
 RUN pnpm --filter @booking/api build
 
 FROM node:22-alpine AS runtime
