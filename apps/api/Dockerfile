@@ -20,4 +20,4 @@ RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
 COPY --from=build /app /app
 
 EXPOSE 3000
-CMD ["sh", "-c", "pnpm --filter @booking/api exec prisma migrate deploy && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "pnpm --filter @booking/api exec prisma migrate deploy && node apps/api/dist/src/main.js"]
